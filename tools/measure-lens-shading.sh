@@ -21,9 +21,10 @@
 #     that it fills the frame
 #   - an evenly lit plain wall, close, camera square to it
 #
-# What matters is that no part of the frame is brighter than another for any
-# reason other than the lens. Avoid: direct light sources in frame, glare,
-# anything clipped to 255, and anything so dark it is in the noise.
+# It does not need to be perfect. Avoid glare, shadows and direct light sources
+# in frame. The raw checker tolerates a modest lighting gradient and warns when
+# the centre is 10-20% below the brightest area; more than 20% can make the map
+# misleading, so adjust the paper or use a more evenly lit wall or screen.
 #
 # Usage:
 #   sudo ./measure-lens-shading.sh            capture and report (processed frame)
@@ -45,6 +46,7 @@ PROJ="$(cd "$HERE/.." && pwd)"
 OUT="${TMPDIR:-/tmp}/lens-shading-flat.png"
 MAP="$PROJ/data/lens-shading-ov5678.bin"
 MEASURED="$PROJ/data/lens-shading-measured.bin"
+CAMERA_ID="${CAMERA_ID:-\_SB_.PC00.LNK0}"
 WRITE=0
 RAW=0
 case "${1:-}" in
@@ -55,21 +57,21 @@ esac
 [ "$(id -u)" -eq 0 ] || { echo "ERROR: must run as root (sudo $0)" >&2; exit 1; }
 
 if [ "$RAW" = 1 ]; then
-    RAWDIR="${TMPDIR:-/tmp}/lens-shading-raw"
-    rm -rf "$RAWDIR"; mkdir -p "$RAWDIR"
+    RAWDIR="$(mktemp -d "${TMPDIR:-/tmp}/lens-shading-raw.XXXXXX")"
+    trap 'rm -rf "$RAWDIR"' EXIT
     echo "== capturing 20 RAW flat-field frames =="
-    systemctl stop ov5678-camera.service 2>/dev/null
-    sleep 1
     env LD_LIBRARY_PATH=/usr/local/lib/x86_64-linux-gnu \
         LIBCAMERA_IPA_MODULE_PATH=/usr/local/lib/x86_64-linux-gnu/libcamera/ipa \
-      timeout 120 /usr/local/bin/cam -c1 -s role=raw -C20 --file="$RAWDIR/raw#.bin" \
+        timeout 120 /usr/local/bin/cam --camera "$CAMERA_ID" -s role=raw -C20 \
+            --file="$RAWDIR/raw#.bin" \
       >/dev/null 2>&1
-    systemctl start ov5678-camera.service 2>/dev/null
     n=$(ls "$RAWDIR"/rawcam0-stream0-*.bin 2>/dev/null | wc -l)
     echo "  captured $n frames"
     [ "$n" -gt 0 ] || { echo "ERROR: no raw frames" >&2; exit 1; }
     OUTMAP="$PROJ/data/lens-shading-measured-raw.bin"
-    python3 "$HERE/measure-shading-raw.py" "$RAWDIR" --compare "$MAP" -o "$OUTMAP"
+    COMPARE_ARGS=()
+    [ ! -f "$MAP" ] || COMPARE_ARGS=(--compare "$MAP")
+    python3 "$HERE/measure-shading-raw.py" "$RAWDIR" "${COMPARE_ARGS[@]}" -o "$OUTMAP"
     rc=$?
     # Running under sudo makes anything written here root-owned, which then
     # makes the ordinary user's next run fail with EACCES on its own data
@@ -140,13 +142,15 @@ bad = []
 if centre < 0.02:  bad.append("too dark - the centre is down in the noise")
 if centre > 0.85:  bad.append("too bright - the centre is close to clipping")
 if gmax > 0.98:    bad.append("some cells are clipped at white")
-if centre < gmax * 0.9:
-    bad.append("the brightest area is not the centre, so this is not a flat field")
+if centre < gmax * 0.8:
+    bad.append("the centre is over 20% darker than the brightest area")
 if bad:
     print("\n  NOT A USABLE FLAT FIELD:")
     for b in bad: print(f"    - {b}")
     print("  Re-shoot per the notes at the top of this script; nothing was written.")
     sys.exit(1)
+if centre < gmax * 0.9:
+    print(f"  WARNING: centre is {100 * (1 - centre / gmax):.0f}% below the brightest area; map may include some lighting gradient")
 
 need = centre / cmean
 print(f"  this unit needs {need:.2f}x at the corners")

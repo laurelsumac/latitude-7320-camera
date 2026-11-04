@@ -87,8 +87,11 @@ def main():
     gmax = max(g)
     if ctr <= 0:
         raise SystemExit("green centre is zero - bad capture")
-    if ctr < gmax * 0.9:
-        raise SystemExit("brightest area is not the centre - not a flat field")
+    centre_ratio = ctr / gmax
+    if centre_ratio < 0.8:
+        raise SystemExit("centre is over 20% darker than the brightest area - lighting is too uneven")
+    if centre_ratio < 0.9:
+        print(f"  WARNING: centre is {100 * (1 - centre_ratio):.0f}% below the brightest area; map may include some lighting gradient")
     sat = sum(1 for v in g if v > 900)
     if sat:
         raise SystemExit(f"{sat} cells near saturation - too bright, reshoot darker")
@@ -108,7 +111,7 @@ def main():
     print(f"\n  ratios to green:  R/G {need[2]/need[0]:.3f}   B/G {need[3]/need[0]:.3f}"
           f"   IR/G {need[1]/need[0]:.3f}")
 
-    if args.compare:
+    if args.compare and os.path.exists(args.compare):
         d = open(args.compare, "rb").read()
         mw, mh, mone, _ = struct.unpack_from("<4H", d, 0)
         n = mw * mh
@@ -119,6 +122,8 @@ def main():
             ico = (pl[2*mw+2] + pl[2*mw+mw-3] + pl[(mh-3)*mw+2] + pl[(mh-3)*mw+mw-3]) / 4 / mone
             print(f"    {NAMES[ch]:<3}  {ico/ic:5.2f}x   (measured {need[ch]:5.2f}x,"
                   f" ratio {(ico/ic)/need[ch]:.2f})")
+    elif args.compare:
+        print("\n  Intel's shading table is not present; skipping comparison")
 
     if args.output:
         planes = []

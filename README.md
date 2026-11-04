@@ -999,12 +999,38 @@ The map is measured from RAW mosaic frames (`tools/measure-lens-shading.sh
 go 0.281 -> 1.001 (G), 0.310 -> 0.996 (R), 0.289 -> 0.998 (B). Because it is
 per-channel it corrects the colour cast as well as the brightness falloff, so a
 single white balance is now correct across the frame. The map is specific to
-this unit's lens - a different module should re-measure it.
+this unit's lens - a different module should re-measure it. Maps are not shipped
+in Git; `*.bin` is ignored, so each unit must produce its own.
 
-The shipped `data/lens-shading-measured-raw.bin` is that map. Intel's tables for
-this module (per-channel 63x47 gain grids, five channels including infrared)
-are decoded in [docs/aiqb-format.md](docs/aiqb-format.md) and kept for
-reference; ours measured better on the holdout set.
+**This unit's latest flat-field measurement (2026-11-04):** 20 raw frames at
+2592x1944, summarized to a 63x47 four-channel map. The center measured 646 green
+counts versus 748 at the brightest grid cell (14% gradient; no clipping). The
+measured corner gains were 2.31x green, 2.33x red, 2.28x blue, and 2.04x IR;
+the relative gains were R/G 1.007 and B/G 0.989. The map is provisional because
+the lighting was not perfectly uniform. Loading it produced a modest subjective
+improvement; a controlled before/after comparison has not been made. The binary
+remains local at `data/lens-shading-measured-raw.bin` and should not be copied to
+another unit.
+
+To measure and apply a map, use a flat field, then:
+
+```sh
+sudo tools/measure-lens-shading.sh --raw
+bash tools/install-lens-shading.sh check
+sudo bash tools/install-lens-shading.sh
+```
+
+The measurement accepts a 10-20% center-to-peak lighting gradient with a warning
+and refuses stronger gradients. The install step copies the local map to
+`/usr/local/share/ov5678/lens-shading.bin` and configures PipeWire/WirePlumber to
+load it. Revert the service setting with:
+
+```sh
+sudo bash tools/install-lens-shading.sh revert
+```
+
+Intel's reference tables (per-channel 63x47 grids, five channels including
+infrared) are decoded in [docs/aiqb-format.md](docs/aiqb-format.md).
 
 ## Diagnostics
 
@@ -1030,6 +1056,7 @@ differs:
 | `install-ccm.sh` | install a matrix - or `intel`, all seven - and/or raise the black level |
 | `refresh-debayer-patch.sh` | regenerate `libcamera-rgbir/debayer_cpu.patch` from the build tree; `--check` reports drift |
 | `set-saturation.sh` | the live saturation knob (needs a CCM installed first) |
+| `install-lens-shading.sh` | validate and install this unit's local shading map for native PipeWire cameras |
 | `check-rgbir.sh` | prove the mosaic is 4x4 RGB-IR, not 2x2 Bayer, from raw pixels |
 | `rgbir-proof.sh` | demosaic one raw frame both ways, side by side; saves the raw |
 | `rgbir-offline.py` | try mosaic phases and IR subtraction on a saved raw, no hardware |
