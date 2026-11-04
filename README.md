@@ -961,6 +961,33 @@ needs manual exposure with the AGC disabled, which the software ISP does not
 accept as a control. A screen also cannot produce a real black, which puts a large
 additive offset into the dark patches that a multiplicative matrix cannot model.
 
+**Direct-light face clipping remains unresolved.** On this unit, a face lit
+directly by a bright source lost visible detail and appeared nearly white. The
+front camera currently exposes `Saturation`, `Contrast`, and `Gamma`, but no
+usable exposure control. The fixed-exposure patch in
+`upstream-libcamera/0002-ipa-simple-agc-Allow-a-fixed-exposure-for-measurement.patch`
+does not apply cleanly to the installed libcamera 0.7.0 tree and was not enabled:
+it also disables auto-exposure and would require scene-specific retuning. Until a
+working exposure control is implemented and tested, diffuse light is the
+practical workaround.
+
+**PipeWire color trials on this unit (2026-11-04).** With white paper in bright
+light, the central processed image measured linear `R/G 1.007` and `B/G 0.960`,
+so white balance was close to neutral with a slight warm bias. Raising PipeWire
+saturation to `1.3` left dark green foliage magenta; a trial at the maximum `2.0`
+looked neon, though the user considered it usable for calls. Saturation was
+returned to `1.0`. These are subjective scene tests, not a calibrated profile:
+the saturation control amplifies channel separation, noise, and crosstalk
+together, so there is no one setting that restores the missing spectrum without
+artifacts.
+
+The per-unit shading map was later measured from 20 raw frames. It measured
+`G 2.31x`, `R 2.33x`, `B 2.28x`, and `IR 2.04x` corner gain, with the center 14%
+below the brightest grid cell. This is a useful but provisional measurement
+because the flat-field lighting was uneven. PipeWire logs confirmed that the
+63x47 map loaded; the user reported a slight improvement. The binary map is
+unit-specific and is not included in the repository.
+
 **Blues are weak because of the demosaic, NOT the sensor or the lighting.**
 An earlier version of this file said the opposite - that ~16% native blue
 response and warm indoor light made vivid blues physically unavailable. That
