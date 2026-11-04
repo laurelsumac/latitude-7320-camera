@@ -552,6 +552,68 @@ sudo tools/install-camera-service.sh
 sudo tools/hide-raw-ipu6-nodes.sh
 ```
 
+### Native PipeWire and Desktop App Compatibility
+
+If the corrected camera already works through PipeWire, add V4L2 compatibility
+without starting a second libcamera pipeline:
+
+```sh
+bash tools/install-camera-compat.sh check
+sudo bash tools/install-camera-compat.sh
+```
+
+This rebuilds the RGB-IR output-size fix so native apps do not request resolutions
+the half-size conversion cannot produce. It also creates a persistent
+`Camera Compatibility` device at `/dev/video64`, fed on demand from the same
+PipeWire source. The paced idle placeholder avoids a busy loop, and the previous
+direct-sensor services are disabled. Existing sensor tuning is preserved.
+
+Native PipeWire apps use **Built-in Front Camera**; V4L2 apps such as Cheese use
+**Camera Compatibility**. An app may still need that camera selected once. Do not
+hide the raw IPU6 nodes with permissions when using this setup: the desktop user's
+native libcamera source needs access to them.
+
+To stop the compatibility feed without affecting the native camera:
+
+```sh
+sudo systemctl disable --now ov5678-compat.service
+```
+
+### Experimental Rear Camera
+
+Rear OV8856 support is not part of the validated front-camera setup. The local
+experiment adds Dell-specific rear-sensor power management and CORE/ANA/VSIO
+consumers with reset on TPS68470 GPIO 9. It preserves the front configuration
+and limits RGB-IR conversion to the front sensor. The initial powered driver
+produced five full-resolution frames at about 30 fps. The additional crop
+selection interface, sensor properties, and analogue-gain helper are intended
+to resolve libcamera warnings; those additions still require installation and
+reboot testing.
+
+```sh
+bash tools/install-rear-camera.sh check
+sudo bash tools/install-rear-camera.sh
+```
+
+The installer backs up the current kernel's two affected modules and boot image
+under `/var/lib/latitude-7320-rear-camera/` before replacing them, then rebuilds
+the boot image. On an upgrade, it preserves the first complete rollback backup.
+It does not unload running modules or reboot automatically. Reboot after a successful
+installation and run `cam --list` to check for both cameras. This experiment is
+for the current kernel only; it is not registered as a maintained DKMS package.
+It refuses installation under kernel lockdown rather than loading unsigned code.
+
+To roll back, run the following and reboot again:
+
+```sh
+sudo bash tools/install-rear-camera.sh revert
+```
+
+The sensor-specific libcamera improvement remains installed on rollback; the
+original kernel modules and boot image are restored. Full-resolution black
+frames and rear autofocus/suspend behavior still require hardware testing. Do
+not assume that detecting the sensor proves a usable stream or reliable suspend.
+
 ### What each step buys you
 
 Same chart, same screen brightness, same output size, captured one after

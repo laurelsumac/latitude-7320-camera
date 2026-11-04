@@ -1,0 +1,33 @@
+--- a/src/libcamera/software_isp/debayer_cpu.cpp
++++ b/src/libcamera/software_isp/debayer_cpu.cpp
+@@ -1452,9 +1452,15 @@
+ SizeRange DebayerCpu::sizes(PixelFormat inputFormat, const Size &inputSize)
+ {
+ 	Size patternSize = this->patternSize(inputFormat);
++	Size outputSize = inputSize;
+ 	unsigned int borderHeight = patternSize.height;
+ 
++	if (utils::secure_getenv("LIBCAMERA_RGBIR")) {
++		outputSize.width /= 2;
++		outputSize.height /= 2;
++	}
++
+ 	if (patternSize.isNull())
+ 		return {};
+ 
+ 	/* No need for top/bottom border with a pattern height of 2 */
+@@ -1468,2 +1474,2 @@
+-	if (inputSize.width < (3 * patternSize.width) ||
+-	    inputSize.height < (2 * borderHeight + patternSize.height)) {
++	if (outputSize.width < (3 * patternSize.width) ||
++	    outputSize.height < (2 * borderHeight + patternSize.height)) {
+@@ -1475,7 +1481,7 @@
+ 	return SizeRange(Size(patternSize.width, patternSize.height),
+-			 Size((inputSize.width - 2 * patternSize.width) & ~(patternSize.width - 1),
+-			      (inputSize.height - 2 * borderHeight) & ~(patternSize.height - 1)),
++			 Size((outputSize.width - 2 * patternSize.width) & ~(patternSize.width - 1),
++			      (outputSize.height - 2 * borderHeight) & ~(patternSize.height - 1)),
+ 			 patternSize.width, patternSize.height);
+ }
+ 
+ } /* namespace libcamera */

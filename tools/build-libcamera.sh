@@ -57,7 +57,6 @@ deps)
     ;;
 
 build)
-    [ -f "$PATCHFILE" ] || { echo "ERROR: $PATCHFILE missing" >&2; exit 1; }
     mkdir -p "$WORK"
     cd "$WORK"
     if [ ! -d libcamera-src ]; then
@@ -81,7 +80,7 @@ build)
         #
         # The layout this needs arrived in 0.7.x, which is what 26.04 ships, and
         # libcamera-rgbir/debayer_cpu.patch is generated against the v0.7.0 tag.
-        LC_VER=$(sed -n "s/^[[:space:]]*version[[:space:]]*:[[:space:]]*'\''\([0-9.]*\)'\''.*/\1/p" meson.build | head -1)
+        LC_VER=$(sed -n "s/^[[:space:]]*version[[:space:]]*:[[:space:]]*'\([0-9.]*\)'.*/\1/p" meson.build | head -1)
         [ -n "$LC_VER" ] || LC_VER=unknown
         echo "== libcamera source version: $LC_VER =="
         case "${LC_VER%.*}" in

@@ -1,0 +1,92 @@
+--- a/ov8856.c
++++ b/ov8856.c
+@@ -3,9 +3,13 @@
+ 
+ #include <linux/acpi.h>
++#include <linux/clk.h>
+ #include <linux/delay.h>
++#include <linux/dmi.h>
++#include <linux/gpio/consumer.h>
+ #include <linux/i2c.h>
+ #include <linux/module.h>
+ #include <linux/pm_runtime.h>
++#include <linux/regulator/consumer.h>
+ #include <linux/version.h>
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0)
+ #include <asm/unaligned.h>
+@@ -655,8 +659,15 @@
+ 
+ 	/* Streaming on/off */
+ 	bool streaming;
++	bool managed_power;
++	bool power_enabled;
++	struct clk *xvclk;
++	struct gpio_desc *reset_gpio;
++	struct regulator_bulk_data supplies[3];
+ };
+ 
++#include "ov8856-dell7320-power.h"
++
+ static u64 to_pixel_rate(u32 f_index)
+ {
+ 	u64 pixel_rate = link_freq_menu_items[f_index] * 2 * OV8856_DATA_LANES;
+@@ -1000,7 +1011,7 @@
+ 
+ 	mutex_unlock(&ov8856->mutex);
+ 
+-	return 0;
++	return ov8856->managed_power ? pm_runtime_force_suspend(dev) : 0;
+ }
+ 
+ static int __maybe_unused ov8856_resume(struct device *dev)
+@@ -1009,6 +1020,12 @@
+ 	struct ov8856 *ov8856 = to_ov8856(sd);
+ 	int ret;
+ 
++	if (ov8856->managed_power) {
++		ret = pm_runtime_force_resume(dev);
++		if (ret)
++			return ret;
++	}
++
+ 	mutex_lock(&ov8856->mutex);
+ 	if (ov8856->streaming) {
+ 		ret = ov8856_start_streaming(ov8856);
+@@ -1238,10 +1254,19 @@
+ 		return -ENOMEM;
+ 
+ 	v4l2_i2c_subdev_init(&ov8856->sd, client, &ov8856_subdev_ops);
++	ret = ov8856_get_power_resources(ov8856);
++	if (ret)
++		return dev_err_probe(&client->dev, ret,
++				     "cannot get rear camera power resources\n");
++
++	ret = ov8856_power_on(&client->dev);
++	if (ret)
++		return ret;
++
+ 	ret = ov8856_identify_module(ov8856);
+ 	if (ret) {
+ 		dev_err(&client->dev, "failed to find sensor: %d", ret);
+-		return ret;
++		goto probe_power_off;
+ 	}
+ 
+ 	mutex_init(&ov8856->mutex);
+@@ -1295,12 +1320,15 @@
+ 	v4l2_ctrl_handler_free(ov8856->sd.ctrl_handler);
+ 	mutex_destroy(&ov8856->mutex);
+ 
++probe_power_off:
++	ov8856_power_off(&client->dev);
+ 	return ret;
+ }
+ 
+ static const struct dev_pm_ops ov8856_pm_ops = {
+ 	SET_SYSTEM_SLEEP_PM_OPS(ov8856_suspend, ov8856_resume)
++	SET_RUNTIME_PM_OPS(ov8856_power_off, ov8856_power_on, NULL)
+ };
+ 
+ static const struct i2c_device_id ov8856_id_table[] = {
+ 	{ "ov8856", 0 },
+

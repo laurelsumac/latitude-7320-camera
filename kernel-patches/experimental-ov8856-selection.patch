@@ -1,0 +1,47 @@
+--- a/ov8856.c
++++ b/ov8856.c
+@@ -1145,6 +1145,36 @@
+ 	return 0;
+ }
+ 
++static int ov8856_get_selection(struct v4l2_subdev *sd,
++				struct v4l2_subdev_state *,
++				struct v4l2_subdev_selection *sel)
++{
++	struct ov8856 *ov8856 = to_ov8856(sd);
++
++	mutex_lock(&ov8856->mutex);
++	switch (sel->target) {
++	case V4L2_SEL_TGT_CROP:
++		sel->r.left = 0;
++		sel->r.top = 0;
++		sel->r.width = ov8856->cur_mode->width;
++		sel->r.height = ov8856->cur_mode->height;
++		break;
++	case V4L2_SEL_TGT_CROP_DEFAULT:
++	case V4L2_SEL_TGT_CROP_BOUNDS:
++		sel->r.left = 0;
++		sel->r.top = 0;
++		sel->r.width = 3280;
++		sel->r.height = 2464;
++		break;
++	default:
++		mutex_unlock(&ov8856->mutex);
++		return -EINVAL;
++	}
++	mutex_unlock(&ov8856->mutex);
++
++	return 0;
++}
++
+ static int ov8856_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
+ {
+ 	struct ov8856 *ov8856 = to_ov8856(sd);
+@@ -1174,6 +1204,7 @@
+ 	.get_fmt = ov8856_get_format,
+ 	.enum_mbus_code = ov8856_enum_mbus_code,
+ 	.enum_frame_size = ov8856_enum_frame_size,
++	.get_selection = ov8856_get_selection,
+ };
+ 
+ static const struct v4l2_subdev_ops ov8856_subdev_ops = {

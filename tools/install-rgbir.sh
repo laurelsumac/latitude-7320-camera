@@ -28,6 +28,7 @@ REPO="$HERE/.."
 USER_HOME="$(getent passwd "${SUDO_USER:-$(id -un)}" | cut -d: -f6)"
 SRC="${USER_HOME:-$HOME}/.cache/libcamera-build/libcamera-src"
 ISP="$SRC/src/libcamera/software_isp"
+FRONT_ONLY_PATCH="$REPO/libcamera-rgbir/front-sensor-only.patch"
 DROPIN_DIR=/etc/systemd/system/v4l2-relayd@.service.d
 RGBIR_CONF="$DROPIN_DIR/50-rgbir.conf"
 # Same detection as fix-browser-camera.sh and tune-relay-pipeline.sh: the
@@ -52,6 +53,10 @@ case "${1:-}" in
 build)
     [ -d "$ISP" ] || { echo "ERROR: no libcamera source at $SRC" >&2
                        echo "       run tools/build-libcamera.sh build first" >&2; exit 1; }
+
+    if patch -s -p1 -R --dry-run --fuzz=0 -d "$SRC" < "$FRONT_ONLY_PATCH" >/dev/null 2>&1; then
+        patch -s -p1 -R --fuzz=0 -d "$SRC" < "$FRONT_ONLY_PATCH"
+    fi
 
     echo "== staging our sources =="
     for f in thread_pool.h rgbir_to_bayer.h rgbir_to_bayer.cpp temporal_denoise.h temporal_denoise.cpp; do
@@ -121,6 +126,34 @@ PY
         echo "       with: tools/refresh-debayer-patch.sh --check" >&2
         exit 1
     fi
+
+    echo "== checking RGB-IR output sizes =="
+    PATCH="$REPO/libcamera-patch/0003-rgbir-limit-output-size.patch"
+    if patch -s -p1 -R --dry-run --fuzz=0 -d "$SRC" < "$PATCH" >/dev/null 2>&1; then
+        echo "   already applied"
+    elif patch -s -p1 --dry-run --fuzz=0 -d "$SRC" < "$PATCH" >/dev/null 2>&1; then
+        patch -s -p1 --fuzz=0 -d "$SRC" < "$PATCH"
+        echo "   applied"
+    else
+        echo "ERROR: RGB-IR output-size patch does not match the source." >&2
+        exit 1
+    fi
+
+    echo "== adding OV8856 sensor properties and gain helper =="
+    PATCH="$REPO/libcamera-patch/experimental-ov8856-support.patch"
+    if patch -s -p1 -R --dry-run --fuzz=0 -d "$SRC" < "$PATCH" >/dev/null 2>&1; then
+        echo "   already applied"
+    elif patch -s -p1 --dry-run --fuzz=0 -d "$SRC" < "$PATCH" >/dev/null 2>&1; then
+        patch -s -p1 --fuzz=0 -d "$SRC" < "$PATCH"
+        echo "   applied"
+    else
+        echo "ERROR: OV8856 support patch does not match the libcamera source." >&2
+        exit 1
+    fi
+
+    echo "== isolating RGB-IR processing to the front sensor =="
+    patch -s -p1 --dry-run --fuzz=0 -d "$SRC" < "$FRONT_ONLY_PATCH"
+    patch -s -p1 --fuzz=0 -d "$SRC" < "$FRONT_ONLY_PATCH"
 
     echo
     echo "== building =="
